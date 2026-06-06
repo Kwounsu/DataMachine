@@ -75,5 +75,3 @@ The `mode` option in `BUTTON_CONFIG` can be set to one of the following values:
 * `generate`
 
   * Generates input/output data using the reference solution.
-
-A future update may add support for applying predefined generation plans in `generate` mode, but this feature has not yet been implemented.
