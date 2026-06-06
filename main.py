@@ -20,7 +20,7 @@ from typing import Any, Callable
 PYTHON = sys.executable
 CPP_STD = "c++20"
 COMPAT_INCLUDE_DIR = Path(__file__).resolve().parent / "compat"
-GEN_FUNC_NAMES = ("generate", "data_make", "dataMake", "make_data", "makeData")
+GEN_FUNC_NAMES = ("generator", "generate", "data_make", "dataMake", "make_data", "makeData")
 
 
 ###############################################################################
@@ -37,13 +37,13 @@ RUN_BY_VSCODE_BUTTON = True
 BUTTON_CONFIG = {
     # "compare": 정답/오답 코드를 비교해 반례 찾기
     # "generate": 정답 코드로 입력/출력 데이터 만들기
-    "mode": "compare",
+    "mode": "generate",
 
     # 공통 설정
     "generator": "./work/generator.py",
     "generator_mode": "auto",  # "auto", "function", "script"
     "answer": "./work/_answer.cpp",
-    # "auto"이면 PATH의 g++ 또는 GenCounter2에 포함된 MinGW를 자동으로 찾습니다.
+    # "auto"이면 PATH의 g++를 자동으로 찾습니다.
     "compiler": "C:/Program Files/CodeBlocks/MinGW/bin/g++.exe",
     "timeout": 5.0,
 
@@ -61,9 +61,6 @@ BUTTON_CONFIG = {
     # generate 모드 설정
     "out_dir": "DATA",
     "count": 10,
-    # plan을 쓰면 count/start/params 대신 아래 케이스 목록대로 생성합니다.
-    # 예: [{"no": 1, "N": 1}, {"no": 2, "N": 10}, {"no": 3, "N": 100}]
-    "plan": [],
 }
 
 
@@ -343,13 +340,7 @@ class Generator:
         assert self.func is not None
         buf = io.StringIO()
         with redirect_stdout(buf):
-            try:
-                value = self.func(case.no, case.params)
-            except TypeError:
-                try:
-                    value = self.func(case.no)
-                except TypeError:
-                    value = self.func()
+            value = self.func()
         printed = buf.getvalue()
         if value is None:
             text = printed
@@ -360,7 +351,7 @@ class Generator:
         return normalize_newlines(text).rstrip("\n")
 
 
-def parse_plan_value(raw: str) -> dict[str, Any]:
+def parse_params_value(raw: str) -> dict[str, Any]:
     if isinstance(raw, dict):
         return dict(raw)
     if not raw:
@@ -385,38 +376,7 @@ def parse_plan_value(raw: str) -> dict[str, Any]:
 
 
 def load_cases(args: argparse.Namespace) -> list[CaseSpec]:
-    plan_cases = getattr(args, "plan_cases", None)
-    if plan_cases:
-        raw = plan_cases
-        cases = []
-        for index, item in enumerate(raw, start=1):
-            if isinstance(item, int):
-                cases.append(CaseSpec(no=item, params={}))
-            elif isinstance(item, dict):
-                no = int(item.get("no", item.get("case", index)))
-                params = {k: v for k, v in item.items() if k not in ("no", "case")}
-                cases.append(CaseSpec(no=no, params=params))
-            else:
-                raise HybridError(f"Unsupported plan item: {item!r}")
-        return cases
-
-    if args.plan:
-        raw = json.loads(Path(args.plan).read_text(encoding="utf-8"))
-        if isinstance(raw, dict) and "cases" in raw:
-            raw = raw["cases"]
-        cases = []
-        for index, item in enumerate(raw, start=1):
-            if isinstance(item, int):
-                cases.append(CaseSpec(no=item, params={}))
-            elif isinstance(item, dict):
-                no = int(item.get("no", item.get("case", index)))
-                params = {k: v for k, v in item.items() if k not in ("no", "case")}
-                cases.append(CaseSpec(no=no, params=params))
-            else:
-                raise HybridError(f"Unsupported plan item: {item!r}")
-        return cases
-
-    params = parse_plan_value(args.params or "")
+    params = parse_params_value(args.params or "")
     return [CaseSpec(no=i, params=dict(params)) for i in range(args.start, args.start + args.count)]
 
 
@@ -444,8 +404,6 @@ def button_namespace(config: dict[str, Any]) -> SimpleNamespace:
         "params": config.get("params", {}),
         "start": int(config.get("start", 1)),
         "count": int(config.get("count", 10)),
-        "plan": "",
-        "plan_cases": config.get("plan", []),
     }
 
     if mode == "generate":
@@ -525,7 +483,7 @@ def compare(args: argparse.Namespace) -> None:
     found = 0
 
     for i in range(args.start, args.start + args.loop):
-        case = CaseSpec(no=i, params=parse_plan_value(args.params or ""))
+        case = CaseSpec(no=i, params=parse_params_value(args.params or ""))
         input_text = generator.make(case, args.timeout)
         print(f"[case {i}] input first {args.preview} chars: {preview(input_text, args.preview)}")
 
@@ -589,7 +547,6 @@ def build_parser() -> argparse.ArgumentParser:
     gen.add_argument("--count", type=int, default=10)
     gen.add_argument("--start", type=int, default=1)
     gen.add_argument("--params", default="", help='JSON, key=value pairs, or @params.json. Example: N=100')
-    gen.add_argument("--plan", help='JSON list, e.g. [{"no":1,"N":1},{"no":2,"N":10}]')
     gen.set_defaults(func=generate_data)
 
     cmp_parser = sub.add_parser("compare", help="Find counterexamples by comparing answer and test code.")
