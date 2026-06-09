@@ -43,7 +43,7 @@ BUTTON_CONFIG = {
     "generator": "./work/generator.py",
     "generator_mode": "auto",  # "auto", "function", "script"
     "answer": "./work/_answer.cpp",
-    # "auto"이면 PATH의 g++를 자동으로 찾습니다.
+    # "auto"이면 PATH의 g++ 또는 GenCounter2에 포함된 MinGW를 자동으로 찾습니다.
     "compiler": "C:/Program Files/CodeBlocks/MinGW/bin/g++.exe",
     "timeout": 5.0,
 
@@ -119,6 +119,8 @@ def compiler_output(args: list[str], compiler: str) -> subprocess.CompletedProce
         args,
         input="int main() { return 0; }\n",
         text=True,
+        encoding="utf-8",
+        errors="replace",
         capture_output=True,
         env=run_env_with_compiler(compiler),
     )
@@ -167,6 +169,7 @@ def run_env_with_compiler(compiler: str) -> dict[str, str]:
     if compiler_path.exists():
         compiler_dir = str(compiler_path.parent)
         env["PATH"] = compiler_dir + os.pathsep + env.get("PATH", "")
+        env["PYTHONIOENCODING"] = "utf-8"
     return env
 
 
@@ -175,6 +178,8 @@ def compiler_version_text(compiler_path: str, compiler: str) -> str:
         proc = subprocess.run(
             [compiler_path, "-v"],
             text=True,
+            encoding="utf-8",
+            errors="replace",
             capture_output=True,
             env=run_env_with_compiler(compiler),
         )
@@ -232,6 +237,8 @@ def compile_cpp(path: Path, compiler: str, force: bool = False) -> Path:
         "-O2",
         "-Wall",
         std_flag,
+        "-finput-charset=UTF-8",
+        "-fexec-charset=UTF-8",
         *include_args,
         str(path),
         "-o",
@@ -239,7 +246,14 @@ def compile_cpp(path: Path, compiler: str, force: bool = False) -> Path:
     ]
     print(f"[build] {' '.join(cmd)}")
     try:
-        proc = subprocess.run(cmd, text=True, capture_output=True, env=run_env_with_compiler(compiler))
+        proc = subprocess.run(
+            cmd,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            capture_output=True,
+            env=run_env_with_compiler(compiler),
+        )
     except FileNotFoundError as exc:
         raise HybridError(f"C++ compiler execution failed: {exc}") from exc
     if proc.returncode != 0:
@@ -268,6 +282,8 @@ def run_code(path: Path, input_text: str, args: list[str], compiler: str, timeou
             cmd,
             input=input_text,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             capture_output=True,
             timeout=timeout,
             env=run_env_with_compiler(compiler),
@@ -329,8 +345,11 @@ class Generator:
         proc = subprocess.run(
             [PYTHON, str(self.path), str(case.no), payload],
             text=True,
+            encoding="utf-8",
+            errors="replace",
             capture_output=True,
             timeout=timeout,
+            env=run_env_with_compiler(""),
         )
         if proc.returncode != 0:
             raise HybridError(proc.stderr.strip() or f"Generator failed on case {case.no}")
